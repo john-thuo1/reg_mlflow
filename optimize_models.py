@@ -9,27 +9,28 @@ from sklearn.linear_model import Lasso, Ridge
 from sklearn.metrics import root_mean_squared_error
 from mlflow.tracking import MlflowClient
 from mlflow.entities import ViewType
+from preprocess_data import Logger
 from train import setup_mlflow
-import logging
 from dotenv import load_dotenv
 import warnings
 
 warnings.filterwarnings("ignore")
 load_dotenv()
 
-log_dir = './Log_Info'
-os.makedirs(log_dir, exist_ok=True)
-logging.basicConfig(filename=os.path.join(log_dir, 'optimize_model.log'), 
-                    level=logging.INFO, 
-                    format='%(asctime)s - %(levelname)s - %(message)s')
+
+MODEL_CLASS_MAP = {
+    'Lasso': Lasso,
+    'Ridge': Ridge
+}
 
 
 def load_pickle(filename: str) -> any:
     with open(filename, "rb") as f_in:
         return pickle.load(f_in)
 
+
 def register_best_model(client: MlflowClient, top_n: int) -> None:
-    # Retrieve the top_n model runs based on RMSE
+    Logger.info("Registering best model...")
     experiment = client.get_experiment_by_name(os.getenv("MLFLOW_EXPERIMENT_NAME"))
     runs = client.search_runs(
         experiment_ids=experiment.experiment_id,
@@ -39,11 +40,8 @@ def register_best_model(client: MlflowClient, top_n: int) -> None:
     )
     best_run = runs[0]
     best_model_uri = f"runs:/{best_run.info.run_id}/model"
-
-    # Register the best model
     mlflow.register_model(model_uri=best_model_uri, name="Best Regression Model")
-    logging.info(f"Registered model {best_model_uri} as 'Best Regression Model'")
-
+    Logger.info(f"Registered model {best_model_uri} as 'Best Regression Model'")
 
 
 @click.command()
@@ -64,20 +62,22 @@ def register_best_model(client: MlflowClient, top_n: int) -> None:
     help="Number of top models that need to be evaluated to decide which one to promote"
 )
 def optimize_models(data_path: str, num_trials: int, top_n: int) -> None:
+    Logger.info("Starting model optimization...")
     client = MlflowClient()
 
     X_train, y_train = load_pickle(os.path.join(data_path, "train.pkl"))
     X_test, y_test = load_pickle(os.path.join(data_path, "test.pkl"))
 
     def objective(params):
-        model_name = params['model']
-        del params['model']
-        if model_name == 'Lasso':
-            model = Lasso(**params)
-        elif model_name == 'Ridge':
-            model = Ridge(**params)
-        else:
-            raise ValueError("Invalid model name")
+        model_name = params.pop('model')
+        model_class = MODEL_CLASS_MAP.get(model_name)
+        
+        if model_class is None:
+            error_message = f"Invalid model name: {model_name}"
+            Logger.error(error_message)
+            raise ValueError(error_message)
+        
+        model = model_class(**params)
         
         with mlflow.start_run(run_name=f'{model_name} Optimization', nested=True):
             mlflow.log_params(params)
@@ -98,20 +98,18 @@ def optimize_models(data_path: str, num_trials: int, top_n: int) -> None:
     }
 
     with mlflow.start_run(run_name="Regression Models Optimization"):
-        rstate = np.random.default_rng(42)
-        trials = Trials()
         fmin(
             fn=objective,
             space=search_space,
             algo=tpe.suggest,
             max_evals=num_trials,
-            trials=trials,
-            rstate=rstate
+            trials=Trials(),
+            rstate=np.random.default_rng(42)
         )
 
         # Register the best model
         register_best_model(client, top_n)
-
+        Logger.info("Optimization completed successfully.")
 
 if __name__ == "__main__":
     setup_mlflow()

@@ -5,19 +5,13 @@ import click
 import mlflow
 from sklearn.linear_model import Lasso, Ridge
 from sklearn.metrics import root_mean_squared_error
-import logging
+from preprocess_data import Logger
+
 from dotenv import load_dotenv
 import warnings
 
 warnings.filterwarnings("ignore")
 load_dotenv()
-
-log_dir = './Log_Info'
-os.makedirs(log_dir, exist_ok=True)
-
-logging.basicConfig(filename=os.path.join(log_dir, 'train_model.log'), 
-                    level=logging.INFO, 
-                    format='%(asctime)s - %(levelname)s - %(message)s')
 
 
 def load_pickle(filename: str) -> any:
@@ -33,9 +27,9 @@ def setup_mlflow() -> None:
         if experiment is None:
             mlflow.create_experiment(os.getenv("MLFLOW_EXPERIMENT_NAME"))
         else:
-            logging.info("Experiment already exists.")
+            Logger.info("Experiment already exists.")
     except (FileNotFoundError, PermissionError, subprocess.CalledProcessError) as e:
-        logging.error(f"Error occurred while setting up MLflow: {e}")
+        Logger.error(f"Error occurred while setting up MLflow: {e}")
 
 
 @click.command()
@@ -45,6 +39,7 @@ def setup_mlflow() -> None:
     help="Folder where data was saved"
 )
 def train_model(data_path: str) -> None:
+    Logger.info("Starting Training models...")
 
     X_train, y_train = load_pickle(os.path.join(data_path, "train.pkl"))
     X_test, y_test = load_pickle(os.path.join(data_path, "test.pkl"))
@@ -53,24 +48,27 @@ def train_model(data_path: str) -> None:
         mlflow.autolog(extra_tags={"developer": "@johnthuo"})
         mlflow.log_param("train-data-path", "./Output/train.pkl")
         mlflow.log_param("test-data-path", "./Output/test.pkl")
-
+        
         # Lasso Regression
-        with mlflow.start_run(nested=True, run_name="Lasso"):
+        with mlflow.start_run(run_name="Lasso", nested=True):
             alpha = 0.1
             lasso_model = Lasso(alpha)
             lasso_model.fit(X_train, y_train)
             y_pred_lasso = lasso_model.predict(X_test)
             rmse_lasso = root_mean_squared_error(y_test, y_pred_lasso)
             mlflow.log_metric("RMSE", rmse_lasso)
+            Logger.info("Successfully logged in Lasso Model Metrics to mlflow ")
         
         # Ridge Regression Model
-        with mlflow.start_run(nested=True, run_name="Ridge"):
+        with mlflow.start_run(run_name="Ridge", nested=True):
             alpha_ridge = 0.5
             ridge_model = Ridge(alpha_ridge)
             ridge_model.fit(X_train, y_train)
             y_pred_ridge = ridge_model.predict(X_test)
             rmse_ridge = root_mean_squared_error(y_test, y_pred_ridge)
             mlflow.log_metric("RMSE", rmse_ridge)
+            Logger.info("Successfully logged in Ridge Model Metrics to mlflow ")
+
 
 if __name__ == '__main__':
     setup_mlflow()

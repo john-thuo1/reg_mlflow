@@ -1,7 +1,6 @@
 import os
 import numpy as np
 import pickle
-import subprocess
 import click
 import mlflow
 from hyperopt import STATUS_OK, Trials, fmin, hp, tpe

@@ -1,11 +1,8 @@
 import os
-import numpy as np
 import pickle
 import subprocess
 import click
 import mlflow
-from hyperopt import STATUS_OK, Trials, fmin, hp, tpe
-from hyperopt.pyll import scope
 from sklearn.linear_model import Lasso, Ridge
 from sklearn.metrics import root_mean_squared_error
 import logging

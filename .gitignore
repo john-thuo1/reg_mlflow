@@ -4,3 +4,4 @@ Logs
 Output
 mlruns
 .env
+mlflow.db

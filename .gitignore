@@ -3,3 +3,4 @@ regressive_env
 Logs
 Output
 mlruns
+.env
